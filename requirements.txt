@@ -1,0 +1,17 @@
+langchain
+langchain-community
+faiss-cpu
+sentence-transformers
+fastapi
+uvicorn
+streamlit
+apscheduler
+sqlalchemy
+python-dotenv
+pinecone-client
+tiktoken
+pydantic
+requests
+google-generativeai
+psycopg2-binary
+
