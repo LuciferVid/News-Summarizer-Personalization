@@ -49,14 +49,21 @@ class InteractRequest(BaseModel):
 
 @app.on_event("startup")
 def startup_event() -> None:
-    """Initializes DB, loads vector index, and starts scheduler."""
+    """Initializes database and starts scheduling services."""
     init_db()
-    vector_store.load()
-    db = SessionLocal()
-    try:
-        build_missing_embeddings(db)
-    finally:
-        db.close()
+    # Background loading of vector index to avoid port-binding timeouts
+    import threading
+    def load_resources():
+        vector_store.load()
+        db = SessionLocal()
+        try:
+            build_missing_embeddings(db)
+        except Exception as e:
+            print(f"Error building missing embeddings: {e}")
+        finally:
+            db.close()
+    
+    threading.Thread(target=load_resources, daemon=True).start()
     start_scheduler()
 
 
