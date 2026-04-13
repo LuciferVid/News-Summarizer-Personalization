@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 import google.generativeai as genai
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.orm import Session
 
 from database.models import Article, SessionLocal
