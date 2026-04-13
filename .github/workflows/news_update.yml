@@ -1,0 +1,21 @@
+name: Periodic News Update
+
+on:
+  schedule:
+    # Run every 4 hours
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  refresh-news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Refresh Endpoint
+        run: |
+          if [ -z "${{ secrets.BACKEND_URL }}" ]; then
+            echo "Error: BACKEND_URL secret is not set."
+            exit 1
+          fi
+          curl -X POST "${{ secrets.BACKEND_URL }}/news/refresh" \
+               -H "Content-Type: application/json" \
+               --fail
