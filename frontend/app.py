@@ -150,6 +150,14 @@ def main() -> None:
     user_id = st.sidebar.text_input("User ID", value="user_1")
     page = st.sidebar.radio("Go to", ["News Feed", "Ask News", "Search"])
 
+    st.sidebar.divider()
+    if st.sidebar.button("🔄 Refresh News"):
+        with st.spinner("Fetching and summarizing latest news..."):
+            refresh_result = _safe_post(f"{BACKEND_URL}/news/refresh", {})
+            if refresh_result:
+                st.sidebar.success(f"Added {refresh_result.get('new_articles', 0)} articles.")
+                st.rerun()
+
     if page == "News Feed":
         render_news_feed(user_id)
     elif page == "Ask News":
