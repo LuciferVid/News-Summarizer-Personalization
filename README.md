@@ -62,4 +62,4 @@ streamlit run frontend/app.py
 | POST | `/news/refresh` | Manual execution of the synchronization pipeline |
 
 ---
-*Technical Documentation - 2026*
+*News Summarizers & Personalization Documentation - 2026*

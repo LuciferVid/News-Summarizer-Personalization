@@ -42,6 +42,17 @@ class InteractRequest(BaseModel):
     interaction_type: str
 
 
+@app.get("/health")
+def health_check() -> dict:
+    """Returns service health and env var status."""
+    return {
+        "status": "ok",
+        "gnews_key_set": bool(os.getenv("GNEWS_API_KEY") or os.getenv("NEWS_API_KEY")),
+        "gemini_key_set": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+        "database_url_set": bool(os.getenv("DATABASE_URL")),
+    }
+
+
 @app.on_event("startup")
 def startup_event() -> None:
     """Initializes database and starts scheduling services."""
