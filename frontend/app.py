@@ -8,7 +8,9 @@ from datetime import datetime
 import requests
 import streamlit as st
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv(
+    "BACKEND_URL", "https://news-summarizer-personalization.onrender.com"
+)
 CATEGORY_COLORS = {
     "technology": "#1f77b4",
     "sports": "#2ca02c",
