@@ -17,11 +17,6 @@ from sqlalchemy.orm import Session
 from database.models import Article, SessionLocal, UserInteraction, get_db, init_db
 from database.vector_store import vector_store
 from personalization.recommender import get_personalized_feed, update_preference
-from pipeline.embeddings import build_missing_embeddings
-from pipeline.rag import answer_question
-from pipeline.summarizer import run_summarization_pipeline
-from scraper.news_fetcher import fetch_and_store_news
-from scraper.scheduler import start_scheduler
 
 load_dotenv()
 
@@ -51,6 +46,10 @@ class InteractRequest(BaseModel):
 def startup_event() -> None:
     """Initializes database and starts scheduling services."""
     init_db()
+    # Deferred imports to prevent startup blocking
+    from pipeline.embeddings import build_missing_embeddings
+    from scraper.scheduler import start_scheduler
+
     # Background loading of vector index to avoid port-binding timeouts
     import threading
     def load_resources():
@@ -92,6 +91,7 @@ def news_feed(user_id: str, db: Session = Depends(get_db)) -> list[dict]:
 @app.post("/news/ask")
 def ask_news(payload: AskRequest) -> dict:
     """Answers user questions with RAG over indexed articles."""
+    from pipeline.rag import answer_question
     return answer_question(payload.query, payload.user_id)
 
 
@@ -222,10 +222,12 @@ def search_news(q: str, db: Session = Depends(get_db)) -> list[dict]:
 @app.post("/news/refresh")
 def refresh_news(db: Session = Depends(get_db)) -> dict:
     """Manually triggers fetch + summarize pipelines."""
+    from pipeline.summarizer import run_summarization_pipeline
+    from scraper.news_fetcher import fetch_and_store_news
+    
     new_articles = fetch_and_store_news()
     summarized = run_summarization_pipeline(db)
     return {
         "new_articles": new_articles,
         "summarized_articles": summarized,
     }
-

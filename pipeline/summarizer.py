@@ -1,16 +1,12 @@
 """Summarization pipeline using Gemini."""
 
 from __future__ import annotations
-
 import json
 import os
 import re
 from typing import Any
-
 from dotenv import load_dotenv
-import google.generativeai as genai
 from sqlalchemy.orm import Session
-
 from database.models import Article
 from pipeline.embeddings import index_article
 
@@ -26,13 +22,12 @@ Article Title: {title}
 Article Content: {content}
 
 Respond ONLY in this exact JSON format, no extra text:
-{{
+{
   "one_liner": "...",
   "short_summary": "...",
   "bullets": ["point1", "point2", "point3", "point4", "point5"]
-}}
+}
 """
-
 
 def _extract_json(text: str) -> dict[str, Any]:
     start = text.find("{")
@@ -40,7 +35,6 @@ def _extract_json(text: str) -> dict[str, Any]:
     if start == -1 or end == -1:
         raise ValueError("No JSON found in model output.")
     return json.loads(text[start : end + 1])
-
 
 def _fallback_summary(title: str, content: str) -> dict[str, Any]:
     """Builds a simple local summary when the LLM is unavailable."""
@@ -62,8 +56,8 @@ def _fallback_summary(title: str, content: str) -> dict[str, Any]:
         "bullets": bullets[:5],
     }
 
-
 def _call_gemini(title: str, content: str) -> dict[str, Any]:
+    import google.generativeai as genai
     prompt = PROMPT_TEMPLATE.format(title=title, content=content)
     model = genai.GenerativeModel("gemini-2.0-flash")
     response = model.generate_content(
@@ -73,9 +67,9 @@ def _call_gemini(title: str, content: str) -> dict[str, Any]:
     output_text = (response.text or "").strip()
     return _extract_json(output_text)
 
-
 def run_summarization_pipeline(db: Session) -> int:
     """Summarizes unsummarized articles and updates DB."""
+    import google.generativeai as genai
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         return 0
@@ -120,4 +114,3 @@ def run_summarization_pipeline(db: Session) -> int:
             continue
 
     return updated
-

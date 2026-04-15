@@ -1,15 +1,10 @@
-"""RAG question answering over ingested news content."""
+"""RAG question answering over ingested news context."""
 
 from __future__ import annotations
-
 import os
 from collections import defaultdict
-
 from dotenv import load_dotenv
-import google.generativeai as genai
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.orm import Session
-
 from database.models import Article, SessionLocal
 from database.vector_store import vector_store
 
@@ -30,17 +25,17 @@ Question: {question}
 Answer (with source citation at the end):
 """
 
-
 def _chunk_article(article: Article) -> list[str]:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
         chunk_overlap=50,
     )
     return splitter.split_text(article.content or "")
 
-
 def answer_question(query: str, user_id: str) -> dict:
     """Answers a user query from relevant news context."""
+    import google.generativeai as genai
     _ = user_id  # Reserved for future user-aware retrieval.
     db: Session = SessionLocal()
     try:
@@ -105,4 +100,3 @@ def answer_question(query: str, user_id: str) -> dict:
         }
     finally:
         db.close()
-
