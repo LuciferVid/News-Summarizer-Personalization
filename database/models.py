@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Generator
+from typing import Generator, Optional, List
 
 from dotenv import load_dotenv
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, create_engine
@@ -33,11 +33,11 @@ class Article(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     url: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False, index=True)
     published_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    one_liner: Mapped[str | None] = mapped_column(Text, nullable=True)
-    short_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    bullets: Mapped[str | None] = mapped_column(Text, nullable=True)
+    one_liner: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    short_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    bullets: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    interactions: Mapped[list["UserInteraction"]] = relationship(back_populates="article")
+    interactions: Mapped[List["UserInteraction"]] = relationship(back_populates="article")
 
 
 class UserPreference(Base):

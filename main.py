@@ -56,38 +56,55 @@ def health_check() -> dict:
 @app.on_event("startup")
 def startup_event() -> None:
     """Initializes database and starts scheduling services."""
+    print("[startup] Initializing system...")
     init_db()
+    
     # Deferred imports to prevent startup blocking
     from pipeline.embeddings import build_missing_embeddings
     from scraper.scheduler import start_scheduler
 
-    # Background loading: fetch news immediately on cold start so the
-    # ephemeral SQLite DB isn't empty after Render free-tier wake-ups.
     import threading
     def load_resources():
+        print("[startup] Background thread started.")
         vector_store.load()
 
-        # --- Immediate news fetch on cold start ---
+        # Immediate news fetch on cold start
         from scraper.news_fetcher import fetch_and_store_news
         from pipeline.summarizer import run_summarization_pipeline
-        try:
-            new_count = fetch_and_store_news()
-            print(f"[startup] Fetched {new_count} new articles.")
-        except Exception as e:
-            print(f"[startup] News fetch failed: {e}")
-
+        
         db = SessionLocal()
         try:
+            print("[startup] Checking for existing articles...")
+            existing_count = db.query(Article).count()
+            
+            if existing_count == 0:
+                print("[startup] Database is empty. Triggering emergency news fetch...")
+                new_count = fetch_and_store_news()
+                print(f"[startup] Emergency fetch complete. Added {new_count} articles.")
+            else:
+                print(f"[startup] Found {existing_count} articles in database.")
+
+            print("[startup] Running summarization pipeline for pending articles...")
             summarized = run_summarization_pipeline(db)
-            print(f"[startup] Summarized {summarized} articles.")
-            build_missing_embeddings(db)
+            if summarized > 0:
+                print(f"[startup] Summarized {summarized} new articles.")
+            
+            print("[startup] Building missing vector embeddings...")
+            indexed = build_missing_embeddings(db)
+            if indexed > 0:
+                print(f"[startup] Indexed {indexed} articles into FAISS.")
+                
         except Exception as e:
-            print(f"[startup] Pipeline error: {e}")
+            print(f"[startup] Fatal error in background initialization: {e}")
         finally:
             db.close()
+            print("[startup] Background thread finished.")
     
     threading.Thread(target=load_resources, daemon=True).start()
+    
+    print("[startup] Starting scheduler...")
     start_scheduler()
+    print("[startup] Initialization complete. Port 10000 binding should be safe.")
 
 
 @app.get("/news/feed")

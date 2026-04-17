@@ -75,7 +75,10 @@ def get_personalized_feed(db: Session, user_id: str) -> list[Article]:
     for article in latest_articles:
         hours_since = max((now - article.published_at).total_seconds() / 3600.0, 0.0)
         recency_score = 1.0 / (hours_since + 1.0)
-        category_weight = weight_map.get(article.category, 0.0)
+        
+        # Use a minimal default weight if category is unknown or untracked
+        category_weight = weight_map.get(article.category, DEFAULT_WEIGHT)
+        
         final_score = category_weight * recency_score
         scored.append((final_score, article))
 
