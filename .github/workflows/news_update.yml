@@ -2,20 +2,37 @@ name: Periodic News Update
 
 on:
   schedule:
-    # Run every 4 hours
-    - cron: '0 */4 * * *'
+    # Run every 2 hours to keep Render alive and DB populated
+    - cron: '0 */2 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
   refresh-news:
     runs-on: ubuntu-latest
     steps:
+      - name: Wake Up Render Service
+        run: |
+          BACKEND="${{ secrets.BACKEND_URL }}"
+          if [ -z "$BACKEND" ]; then
+            BACKEND="https://news-summarizer-personalization.onrender.com"
+          fi
+
+          echo "Waking up Render service at $BACKEND..."
+          # First call wakes the service - allow up to 120s for cold start
+          curl -s --max-time 120 "$BACKEND/health" || echo "Wake-up ping sent (may still be booting)"
+
+          # Give Render a moment to fully boot
+          sleep 10
+
       - name: Trigger Refresh Endpoint
         run: |
-          if [ -z "${{ secrets.BACKEND_URL }}" ]; then
-            echo "Error: BACKEND_URL secret is not set."
-            exit 1
+          BACKEND="${{ secrets.BACKEND_URL }}"
+          if [ -z "$BACKEND" ]; then
+            BACKEND="https://news-summarizer-personalization.onrender.com"
           fi
-          curl -X POST "${{ secrets.BACKEND_URL }}/news/refresh" \
+
+          echo "Triggering news refresh..."
+          curl -X POST "$BACKEND/news/refresh" \
                -H "Content-Type: application/json" \
-               --fail
+               --max-time 300 \
+               --fail || echo "Refresh timed out but startup fetch should handle it"

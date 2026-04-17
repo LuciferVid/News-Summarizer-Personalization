@@ -47,7 +47,7 @@ def render_news_feed(user_id: str) -> None:
         st.warning("Unable to load feed.")
         return
 
-    all_categories = ["technology", "sports", "business", "health", "entertainment"]
+    all_categories = ["technology", "sports", "business", "health", "entertainment", "world", "nation"]
     selected_categories = []
     st.sidebar.subheader("Category Filters")
     for category in all_categories:

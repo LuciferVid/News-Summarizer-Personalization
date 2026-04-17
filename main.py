@@ -61,15 +61,28 @@ def startup_event() -> None:
     from pipeline.embeddings import build_missing_embeddings
     from scraper.scheduler import start_scheduler
 
-    # Background loading of vector index to avoid port-binding timeouts
+    # Background loading: fetch news immediately on cold start so the
+    # ephemeral SQLite DB isn't empty after Render free-tier wake-ups.
     import threading
     def load_resources():
         vector_store.load()
+
+        # --- Immediate news fetch on cold start ---
+        from scraper.news_fetcher import fetch_and_store_news
+        from pipeline.summarizer import run_summarization_pipeline
+        try:
+            new_count = fetch_and_store_news()
+            print(f"[startup] Fetched {new_count} new articles.")
+        except Exception as e:
+            print(f"[startup] News fetch failed: {e}")
+
         db = SessionLocal()
         try:
+            summarized = run_summarization_pipeline(db)
+            print(f"[startup] Summarized {summarized} articles.")
             build_missing_embeddings(db)
         except Exception as e:
-            print(f"Error building missing embeddings: {e}")
+            print(f"[startup] Pipeline error: {e}")
         finally:
             db.close()
     

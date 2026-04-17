@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from database.models import Article, UserPreference
 
-CATEGORIES = ["technology", "sports", "business", "health", "entertainment"]
+CATEGORIES = ["technology", "sports", "business", "health", "entertainment", "world", "nation"]
 DEFAULT_WEIGHT = 0.2
 
 

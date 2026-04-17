@@ -24,13 +24,21 @@ def start_scheduler() -> None:
     if scheduler.running:
         return
 
-    scheduler.add_job(fetch_and_store_news, "interval", minutes=30, id="fetch_news", replace_existing=True)
+    scheduler.add_job(
+        fetch_and_store_news,
+        "interval",
+        minutes=15,
+        id="fetch_news",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
     scheduler.add_job(
         _run_summarization_job,
         "interval",
-        minutes=35,
+        minutes=18,
         id="summarize_news",
         replace_existing=True,
+        misfire_grace_time=300,
     )
     scheduler.start()
 
