@@ -57,15 +57,7 @@ def render_news_feed(user_id: str) -> None:
     filtered = [article for article in articles if article.get("category") in selected_categories]
 
     if not filtered:
-        st.info("No news found in the current selection.")
-        st.markdown("""
-        ### Why is this empty?
-        1. **Cold Start:** The system just woke up and is still fetching news in the background. Please wait ~60 seconds and refresh.
-        2. **API Quota:** The daily news API limit may have been reached.
-        3. **Filters:** You might have unchecked all categories in the sidebar.
-        
-        Click the **🔄 Refresh News** button in the sidebar to manually trigger an update.
-        """)
+        st.info("No news found in the current selection. Please try refreshing.")
         return
 
     col1, col2 = st.columns(2)
