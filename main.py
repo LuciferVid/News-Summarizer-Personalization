@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
@@ -261,14 +261,29 @@ def search_news(q: str, db: Session = Depends(get_db)) -> list[dict]:
 
 
 @app.post("/news/refresh")
-def refresh_news(db: Session = Depends(get_db)) -> dict:
-    """Manually triggers fetch + summarize pipelines."""
-    from pipeline.summarizer import run_summarization_pipeline
-    from scraper.news_fetcher import fetch_and_store_news
-    
-    new_articles = fetch_and_store_news()
-    summarized = run_summarization_pipeline(db)
+def refresh_news(background_tasks: BackgroundTasks) -> dict:
+    """Manually triggers fetch + summarize pipelines in the background."""
+    def run_refresh_task():
+        from database.models import SessionLocal
+        local_db = SessionLocal()
+        try:
+            from pipeline.summarizer import run_summarization_pipeline
+            from scraper.news_fetcher import fetch_and_store_news
+            
+            print("[refresh] Starting background fetch...")
+            fetch_and_store_news()
+            print("[refresh] Starting background summarization...")
+            run_summarization_pipeline(local_db)
+            print("[refresh] Background refresh completed successfully.")
+        except Exception as e:
+            print(f"[refresh] Background refresh failed: {e}")
+        finally:
+            local_db.close()
+            
+    background_tasks.add_task(run_refresh_task)
     return {
-        "new_articles": new_articles,
-        "summarized_articles": summarized,
+        "status": "started",
+        "message": "News refresh triggered in the background. Please wait a moment and refresh.",
+        "new_articles": 0,
+        "summarized_articles": 0,
     }

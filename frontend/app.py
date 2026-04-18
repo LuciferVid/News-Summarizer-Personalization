@@ -164,10 +164,11 @@ def main() -> None:
 
     st.sidebar.divider()
     if st.sidebar.button("🔄 Refresh News"):
-        with st.spinner("Fetching and summarizing latest news..."):
+        with st.spinner("Triggering news fetch in the background..."):
             refresh_result = _safe_post(f"{BACKEND_URL}/news/refresh", {})
             if refresh_result:
-                st.sidebar.success(f"Added {refresh_result.get('new_articles', 0)} articles.")
+                msg = refresh_result.get("message", f"Added {refresh_result.get('new_articles', 0)} articles.")
+                st.sidebar.success(msg)
                 st.rerun()
 
     if page == "News Feed":
