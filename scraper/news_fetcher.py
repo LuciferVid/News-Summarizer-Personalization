@@ -49,15 +49,26 @@ def fetch_and_store_news(minimal: bool = False) -> int:
         return 0
 
     db: Session = SessionLocal()
+    
+    # --- SMART SKIP: Only fetch if DB is thin ---
+    from sqlalchemy import func
+    recent_count = db.query(Article).filter(Article.published_at >= datetime.utcnow().date()).count()
+    if recent_count >= 50 and not minimal:
+        print(f"[fetcher] DB already has {recent_count} recent articles. Skipping refresh to save quota.")
+        db.close()
+        return 0
+
     new_count = 0
     
-    # In minimal mode, we only do 1 request instead of 18 (Quota-Safe)
+    # In minimal mode or standard mode, we prioritize 'in' to save quota.
+    # To restore US/GB, add them back to COUNTRIES in config.
     fetch_list = []
     if minimal:
         fetch_list = [("in", "general")]
         print("[fetcher] Minimal mode active: Only fetching global headlines for 'in' to save quota.")
     else:
-        for country in COUNTRIES:
+        # Defaulting to 'in' only for background jobs to stay under 100/day
+        for country in ["in"]: 
             for category in CATEGORIES:
                 fetch_list.append((country, category))
 

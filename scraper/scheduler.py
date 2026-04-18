@@ -27,7 +27,7 @@ def start_scheduler() -> None:
     scheduler.add_job(
         fetch_and_store_news,
         "interval",
-        minutes=15,
+        hours=6,
         id="fetch_news",
         replace_existing=True,
         misfire_grace_time=300,
