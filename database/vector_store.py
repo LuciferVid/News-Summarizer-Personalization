@@ -30,7 +30,11 @@ class VectorStore:
         """Loads index/mapping from disk if available."""
         if os.path.exists(INDEX_PATH) and os.path.exists(MAPPING_PATH):
             try:
-                self.index = faiss.read_index(INDEX_PATH)
+                temp_index = faiss.read_index(INDEX_PATH)
+                if temp_index.d != self.dim:
+                    print(f"[vector_store] Dimension mismatch ({temp_index.d} != {self.dim}), rebuilding index!")
+                    raise ValueError("Dimension mismatch")
+                self.index = temp_index
                 with open(MAPPING_PATH, "r", encoding="utf-8") as file:
                     self.mapping = json.load(file)
             except Exception:

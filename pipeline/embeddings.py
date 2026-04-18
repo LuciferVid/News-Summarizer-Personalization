@@ -5,25 +5,31 @@ from sqlalchemy.orm import Session
 from database.models import Article
 
 class EmbeddingService:
-    """Singleton-like wrapper around sentence-transformers model."""
+    """Uses Google Gemini for text embeddings."""
 
-    _model = None
-
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
-        self.model_name = model_name
-        self.embedding_dimension = 384  # Optimized constant for all-MiniLM-L6-v2
-
-    @property
-    def model(self):
-        """Lazy loads the model on first access."""
-        if EmbeddingService._model is None:
-            from sentence_transformers import SentenceTransformer
-            EmbeddingService._model = SentenceTransformer(self.model_name)
-        return EmbeddingService._model
+    def __init__(self) -> None:
+        self.embedding_dimension = 768  # Dimension for text-embedding-004
 
     def embed_text(self, text: str) -> list[float]:
         """Returns vector embedding for the given text."""
-        return self.model.encode(text, normalize_embeddings=True).tolist()
+        import os
+        import google.generativeai as genai
+        
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            return [0.0] * self.embedding_dimension
+            
+        genai.configure(api_key=api_key)
+        
+        try:
+            result = genai.embed_content(
+                model="models/text-embedding-004",
+                content=text,
+            )
+            return result["embedding"]
+        except Exception as e:
+            print(f"[EmbeddingService] Failed: {e}")
+            return [0.0] * self.embedding_dimension
 
 def index_article(article: Article) -> None:
     """Embeds a summarized article and adds it to FAISS."""
