@@ -79,7 +79,7 @@ def startup_event() -> None:
             
             if existing_count == 0:
                 print("[startup] Database is empty. Triggering emergency news fetch...")
-                new_count = fetch_and_store_news()
+                new_count = fetch_and_store_news(minimal=True)
                 print(f"[startup] Emergency fetch complete. Added {new_count} articles.")
             else:
                 print(f"[startup] Found {existing_count} articles in database.")
