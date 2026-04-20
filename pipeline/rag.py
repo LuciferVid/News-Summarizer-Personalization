@@ -14,16 +14,19 @@ load_dotenv()
 MIN_SIMILARITY = 0.35
 
 RAG_PROMPT = """
-You are a helpful news assistant. Answer the user's question using the
-context provided below.  Draw on ALL articles that are even partially
-relevant — for example, if the user asks about weather in one city and
-you have weather news from a nearby region, mention it and note the
-difference.
+You are a helpful news assistant with access to today's news articles.
 
-If NONE of the articles are even remotely related to the question,
-say: "I don't have enough information in the current news to answer this."
-
-Always cite the source article title(s) you used at the end.
+Rules:
+1. Answer the user's question using the context below.
+2. If the EXACT topic isn't covered, find the CLOSEST related news from
+   the context and share it. For example, if asked about weather in Pune
+   and you have weather news from Delhi, share that and note the difference.
+3. If the question is broad (e.g. "what's happening in sports?"), summarize
+   the most interesting articles from the context.
+4. ONLY say "I don't have news about this specific topic" if absolutely
+   NONE of the articles are even loosely related — then suggest what
+   topics ARE available based on the context.
+5. Always cite the source article title(s) at the end.
 
 Context:
 {context}
@@ -61,6 +64,17 @@ def _keyword_fallback(db: Session, query: str, limit: int = 10) -> list[Article]
     return [a for _, a in scored[:limit]]
 
 
+def _latest_articles(db: Session, limit: int = 10) -> list[Article]:
+    """Returns the most recent summarized articles as a last-resort context."""
+    return (
+        db.query(Article)
+        .filter(Article.short_summary.isnot(None))
+        .order_by(Article.published_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def answer_question(query: str, user_id: str) -> dict:
     """Answers a user query from relevant news context."""
     import google.generativeai as genai
@@ -68,7 +82,9 @@ def answer_question(query: str, user_id: str) -> dict:
     _ = user_id  # Reserved for future user-aware retrieval.
     db: Session = SessionLocal()
     try:
-        # Try FAISS first.
+        ordered_articles: list[Article] = []
+
+        # 1. Try FAISS semantic search first.
         scored_results = vector_store.search_similar_with_scores(query, top_k=15)
         relevant_ids = [
             article_id
@@ -80,14 +96,21 @@ def answer_question(query: str, user_id: str) -> dict:
             articles = db.query(Article).filter(Article.id.in_(relevant_ids)).all()
             article_by_id = {a.id: a for a in articles}
             ordered_articles = [article_by_id[aid] for aid in relevant_ids if aid in article_by_id]
-        else:
-            # FAISS empty or no relevant results — fall back to keyword search.
-            print(f"[RAG] FAISS returned 0 relevant results (index size={vector_store.index.ntotal}). Falling back to keyword search.")
+
+        # 2. If FAISS returned nothing, try keyword fallback.
+        if not ordered_articles:
+            print(f"[RAG] FAISS returned 0 relevant results (index={vector_store.index.ntotal}). Trying keyword fallback.")
             ordered_articles = _keyword_fallback(db, query)
+
+        # 3. If keywords matched nothing either, use latest articles so the
+        #    model can still offer something useful.
+        if not ordered_articles:
+            print("[RAG] Keyword fallback also empty. Using latest articles.")
+            ordered_articles = _latest_articles(db)
 
         if not ordered_articles:
             return {
-                "answer": "I don't have enough information in the current news to answer this.",
+                "answer": "No news articles are available right now. Please try refreshing the news feed first.",
                 "sources": [],
             }
 
@@ -112,14 +135,14 @@ def answer_question(query: str, user_id: str) -> dict:
             if not body_parts:
                 continue
 
-            context_parts.append(f"Title: {article.title}\n" + "\n".join(body_parts))
+            context_parts.append(f"Title: {article.title}\nCategory: {article.category}\n" + "\n".join(body_parts))
             if article.url not in seen_urls:
                 sources.append({"title": article.title, "url": article.url})
                 seen_urls.add(article.url)
 
         if not context_parts:
             return {
-                "answer": "I don't have enough information in the current news to answer this.",
+                "answer": "No news articles are available right now. Please try refreshing the news feed first.",
                 "sources": [],
             }
 
@@ -128,7 +151,7 @@ def answer_question(query: str, user_id: str) -> dict:
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
             return {
-                "answer": "I don't have enough information in the current news to answer this.",
+                "answer": "AI model is not configured. Please set GEMINI_API_KEY.",
                 "sources": sources,
             }
 
@@ -138,12 +161,12 @@ def answer_question(query: str, user_id: str) -> dict:
         try:
             response = model.generate_content(
                 prompt,
-                generation_config={"temperature": 0.2}
+                generation_config={"temperature": 0.3}
             )
             answer = (response.text or "").strip()
         except Exception as e:
             print(f"[RAG] Model generation failed: {e}")
-            answer = "I don't have enough information in the current news to answer this."
+            answer = "Sorry, the AI model is temporarily unavailable. Please try again in a moment."
 
         return {
             "answer": answer,
