@@ -9,19 +9,27 @@ from database.vector_store import vector_store
 
 load_dotenv()
 
+# Minimum cosine similarity to consider an article relevant.
+MIN_SIMILARITY = 0.35
+
 RAG_PROMPT = """
-You are a helpful news assistant. Answer the user's question using ONLY 
-the context provided below. 
-If the answer is not in the context, say exactly: 
-"I don't have enough information in the current news to answer this."
-Always end your answer by citing the source article title.
+You are a helpful news assistant. Answer the user's question using the
+context provided below.  Draw on ALL articles that are even partially
+relevant — for example, if the user asks about weather in one city and
+you have weather news from a nearby region, mention it and note the
+difference.
+
+If NONE of the articles are even remotely related to the question,
+say: "I don't have enough information in the current news to answer this."
+
+Always cite the source article title(s) you used at the end.
 
 Context:
 {context}
 
 Question: {question}
 
-Answer (with source citation at the end):
+Answer (with source citations):
 """
 
 
@@ -32,16 +40,26 @@ def answer_question(query: str, user_id: str) -> dict:
     _ = user_id  # Reserved for future user-aware retrieval.
     db: Session = SessionLocal()
     try:
-        article_ids = vector_store.search_similar(query, top_k=10)
-        if not article_ids:
+        # Use scored search so we can filter by relevance.
+        scored_results = vector_store.search_similar_with_scores(query, top_k=15)
+
+        # Keep only articles above the similarity threshold.
+        relevant_ids = [
+            article_id
+            for article_id, score in scored_results
+            if score >= MIN_SIMILARITY
+        ]
+
+        if not relevant_ids:
             return {
                 "answer": "I don't have enough information in the current news to answer this.",
                 "sources": [],
             }
 
-        articles = db.query(Article).filter(Article.id.in_(article_ids)).all()
+        articles = db.query(Article).filter(Article.id.in_(relevant_ids)).all()
         article_by_id = {article.id: article for article in articles}
-        ordered_articles = [article_by_id[aid] for aid in article_ids if aid in article_by_id]
+        # Preserve the ranked order from FAISS.
+        ordered_articles = [article_by_id[aid] for aid in relevant_ids if aid in article_by_id]
 
         # Build context from pre-computed summaries — fast and quota-free.
         context_parts: list[str] = []
@@ -91,7 +109,7 @@ def answer_question(query: str, user_id: str) -> dict:
         try:
             response = model.generate_content(
                 prompt,
-                generation_config={"temperature": 0.1}
+                generation_config={"temperature": 0.2}
             )
             answer = (response.text or "").strip()
         except Exception as e:
