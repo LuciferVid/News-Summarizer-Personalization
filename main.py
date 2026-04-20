@@ -50,6 +50,7 @@ def health_check() -> dict:
         "gnews_key_set": bool(os.getenv("GNEWS_API_KEY") or os.getenv("NEWS_API_KEY")),
         "gemini_key_set": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
         "database_url_set": bool(os.getenv("DATABASE_URL")),
+        "faiss_index_count": vector_store.index.ntotal,
     }
 
 

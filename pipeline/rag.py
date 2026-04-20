@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import os
+import re
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from database.models import Article, SessionLocal
@@ -33,6 +34,33 @@ Answer (with source citations):
 """
 
 
+def _keyword_fallback(db: Session, query: str, limit: int = 10) -> list[Article]:
+    """Falls back to simple keyword matching when FAISS index is empty."""
+    tokens = [t for t in re.findall(r"[a-zA-Z0-9]+", query.lower()) if len(t) >= 3]
+    if not tokens:
+        return []
+
+    articles = (
+        db.query(Article)
+        .filter(Article.short_summary.isnot(None))
+        .order_by(Article.published_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    scored: list[tuple[float, Article]] = []
+    for article in articles:
+        text = f"{article.title} {article.short_summary or ''} {article.category}".lower()
+        hits = sum(1 for t in tokens if t in text)
+        if hits == 0:
+            continue
+        score = hits / len(tokens)
+        scored.append((score, article))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [a for _, a in scored[:limit]]
+
+
 def answer_question(query: str, user_id: str) -> dict:
     """Answers a user query from relevant news context."""
     import google.generativeai as genai
@@ -40,26 +68,28 @@ def answer_question(query: str, user_id: str) -> dict:
     _ = user_id  # Reserved for future user-aware retrieval.
     db: Session = SessionLocal()
     try:
-        # Use scored search so we can filter by relevance.
+        # Try FAISS first.
         scored_results = vector_store.search_similar_with_scores(query, top_k=15)
-
-        # Keep only articles above the similarity threshold.
         relevant_ids = [
             article_id
             for article_id, score in scored_results
             if score >= MIN_SIMILARITY
         ]
 
-        if not relevant_ids:
+        if relevant_ids:
+            articles = db.query(Article).filter(Article.id.in_(relevant_ids)).all()
+            article_by_id = {a.id: a for a in articles}
+            ordered_articles = [article_by_id[aid] for aid in relevant_ids if aid in article_by_id]
+        else:
+            # FAISS empty or no relevant results — fall back to keyword search.
+            print(f"[RAG] FAISS returned 0 relevant results (index size={vector_store.index.ntotal}). Falling back to keyword search.")
+            ordered_articles = _keyword_fallback(db, query)
+
+        if not ordered_articles:
             return {
                 "answer": "I don't have enough information in the current news to answer this.",
                 "sources": [],
             }
-
-        articles = db.query(Article).filter(Article.id.in_(relevant_ids)).all()
-        article_by_id = {article.id: article for article in articles}
-        # Preserve the ranked order from FAISS.
-        ordered_articles = [article_by_id[aid] for aid in relevant_ids if aid in article_by_id]
 
         # Build context from pre-computed summaries — fast and quota-free.
         context_parts: list[str] = []
@@ -67,7 +97,6 @@ def answer_question(query: str, user_id: str) -> dict:
         seen_urls: set[str] = set()
 
         for article in ordered_articles:
-            # Build the richest context we have from stored fields
             body_parts = []
             if article.short_summary:
                 body_parts.append(article.short_summary)

@@ -66,6 +66,11 @@ class VectorStore:
             return
 
         embedding = self.embedding_service.embed_text(text)
+        # Skip zero vectors — they come from failed API calls and would
+        # corrupt similarity scores for every future search.
+        if all(v == 0.0 for v in embedding):
+            print(f"[vector_store] Skipping article {article_id} — got zero embedding (API failure).")
+            return
         vector = self._normalize(np.array([embedding], dtype="float32"))
         self.index.add(vector)
         self.mapping.append(article_id)
