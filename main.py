@@ -169,7 +169,7 @@ def search_news(q: str, db: Session = Depends(get_db)) -> list[dict]:
     semantic_map = {article_id: score for article_id, score in semantic_results}
     query_tokens = [token for token in re.findall(r"[a-zA-Z0-9]+", query.lower()) if len(token) >= 3]
 
-    recent_articles = db.query(Article).order_by(Article.published_at.desc()).limit(300).all()
+    recent_articles = db.query(Article).order_by(Article.published_at.desc()).limit(1000).all()
     by_id = {article.id: article for article in recent_articles}
 
     candidate_ids = set(semantic_map.keys())
@@ -185,16 +185,26 @@ def search_news(q: str, db: Session = Depends(get_db)) -> list[dict]:
             continue
 
         semantic_score = semantic_map.get(article_id, 0.0)
-        text = f"{article.title} {article.short_summary or ''} {article.content or ''} {article.source}".lower()
-        keyword_hits = sum(1 for token in query_tokens if token in text)
+        title_text = article.title.lower()
+        full_text = f"{article.title} {article.short_summary or ''} {article.content or ''}".lower()
+        
+        # Check for keyword hits in title vs full text for boosting
+        keyword_hits = sum(1 for token in query_tokens if token in full_text)
+        title_hits = sum(1 for token in query_tokens if token in title_text)
+        
         lexical_score = (keyword_hits / len(query_tokens)) if query_tokens else 0.0
-        combined_score = (0.65 * semantic_score) + (0.35 * lexical_score)
+        title_boost = (title_hits / len(query_tokens)) if query_tokens else 0.0
+        
+        # Weighted combination: prioritize semantic but give lexical hits significant weight
+        combined_score = (0.55 * semantic_score) + (0.35 * lexical_score) + (0.10 * title_boost)
 
-        # Guardrail for named-entity style queries: require some lexical support.
-        if len(query_tokens) >= 2 and lexical_score == 0.0 and semantic_score < 0.45:
+        # Stricter filtering for named entities - if query has 2+ words, we expect some word overlap
+        if len(query_tokens) >= 2 and lexical_score < 0.3 and semantic_score < 0.55:
             continue
-        if combined_score < 0.20:
+            
+        if combined_score < 0.28:
             continue
+            
         scored_candidates.append((combined_score, article))
 
     scored_candidates.sort(key=lambda item: item[0], reverse=True)

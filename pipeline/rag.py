@@ -39,7 +39,9 @@ def answer_question(query: str, user_id: str) -> dict:
     _ = user_id  # Reserved for future user-aware retrieval.
     db: Session = SessionLocal()
     try:
-        article_ids = vector_store.search_similar(query, top_k=5)
+        # Increase top_k to 10 to ensure we don't miss the most relevant article 
+        # due to initial vector search noise.
+        article_ids = vector_store.search_similar(query, top_k=10)
         if not article_ids:
             return {
                 "answer": "I don't have enough information in the current news to answer this.",
@@ -52,16 +54,26 @@ def answer_question(query: str, user_id: str) -> dict:
 
         chunk_pool: list[tuple[float, str, Article]] = []
         embedding_service = vector_store.embedding_service
-        query_embedding = embedding_service.embed_text(query)
+        
+        raw_query_vec = embedding_service.embed_text(query)
+        # Normalize query vector for cosine similarity
+        q_norm = sum(x*x for x in raw_query_vec)**0.5
+        query_embedding = [x/q_norm for x in raw_query_vec] if q_norm > 0 else raw_query_vec
 
         for article in ordered_articles:
             for chunk in _chunk_article(article):
-                chunk_vec = embedding_service.embed_text(chunk)
+                raw_chunk_vec = embedding_service.embed_text(chunk)
+                # Normalize chunk vector
+                c_norm = sum(x*x for x in raw_chunk_vec)**0.5
+                chunk_vec = [x/c_norm for x in raw_chunk_vec] if c_norm > 0 else raw_chunk_vec
+                
+                # Cosine similarity
                 score = sum(q * c for q, c in zip(query_embedding, chunk_vec))
                 chunk_pool.append((score, chunk, article))
 
         chunk_pool.sort(key=lambda item: item[0], reverse=True)
-        top_chunks = chunk_pool[:5]
+        # Take slightly more chunks for better context
+        top_chunks = chunk_pool[:8]
 
         grouped_context = defaultdict(list)
         for _, chunk, article in top_chunks:
@@ -89,9 +101,14 @@ def answer_question(query: str, user_id: str) -> dict:
         model = genai.GenerativeModel("gemini-2.0-flash")
         prompt = RAG_PROMPT.format(context=context, question=query)
         try:
-            response = model.generate_content(prompt)
+            # Use lower temperature for more factual Retrieval-Augmented Generation
+            response = model.generate_content(
+                prompt,
+                generation_config={"temperature": 0.1}
+            )
             answer = (response.text or "").strip()
-        except Exception:
+        except Exception as e:
+            print(f"[RAG] Model generation failed: {e}")
             answer = "I don't have enough information in the current news to answer this."
 
         return {
