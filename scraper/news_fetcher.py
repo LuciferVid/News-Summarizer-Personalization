@@ -64,8 +64,8 @@ def fetch_and_store_news(minimal: bool = False) -> int:
     # To restore US/GB, add them back to COUNTRIES in config.
     fetch_list = []
     if minimal:
-        fetch_list = [("in", "general")]
-        print("[fetcher] Minimal mode active: Only fetching global headlines for 'in' to save quota.")
+        fetch_list = [("in", "world")]
+        print("[fetcher] Minimal mode active: Only fetching world headlines for 'in' to save quota.")
     else:
         # Defaulting to 'in' only for background jobs to stay under 100/day
         for country in ["in"]: 
